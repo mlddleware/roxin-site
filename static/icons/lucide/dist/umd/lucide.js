@@ -10,7 +10,7 @@
             if (!document.getElementById('lucide-cdn')) {
                 const script = document.createElement('script');
                 script.id = 'lucide-cdn';
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js';
+                script.src = 'https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.js';
                 script.onload = function() {
                     // После загрузки CDN версии, инициализируем иконки
                     if (window.lucide && window.lucide.createIcons) {

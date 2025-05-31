@@ -16,4 +16,5 @@ Flask-CORS==4.0.0
 python-socketio==5.8.0
 eventlet==0.33.3
 pytz==2023.3
-python-telegram-bot==20.7 
+python-telegram-bot==20.7
+redis==5.0.1 

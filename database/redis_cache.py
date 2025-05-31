@@ -4,7 +4,15 @@ import logging
 from datetime import timedelta
 from functools import wraps
 from dotenv import load_dotenv
-import redis
+
+# Опциональный импорт Redis
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    redis = None
+    logging.warning("Redis module не установлен. Кэширование отключено.")
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -22,26 +30,29 @@ REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD')
 # Инициализация Redis клиента
 redis_client = None
 
-try:
-    if REDIS_URL:
-        redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
-    else:
-        redis_client = redis.Redis(
-            host=REDIS_HOST, 
-            port=REDIS_PORT, 
-            password=REDIS_PASSWORD,
-            decode_responses=True,
-            socket_timeout=5,
-            socket_connect_timeout=5
-        )
-    
-    # Тестируем соединение
-    redis_client.ping()
-    logger.info("Успешное подключение к Redis")
-    
-except Exception as e:
-    logger.warning(f"Redis недоступен: {e}. Кэширование отключено.")
-    redis_client = None
+if REDIS_AVAILABLE:
+    try:
+        if REDIS_URL:
+            redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        else:
+            redis_client = redis.Redis(
+                host=REDIS_HOST, 
+                port=REDIS_PORT, 
+                password=REDIS_PASSWORD,
+                decode_responses=True,
+                socket_timeout=5,
+                socket_connect_timeout=5
+            )
+        
+        # Тестируем соединение
+        redis_client.ping()
+        logger.info("Успешное подключение к Redis")
+        
+    except Exception as e:
+        logger.warning(f"Redis недоступен: {e}. Кэширование отключено.")
+        redis_client = None
+else:
+    logger.warning("Redis module недоступен. Кэширование отключено.")
 
 # Увеличенные времена кэширования для производительности
 CACHE_TIMES = {
@@ -55,7 +66,7 @@ CACHE_TIMES = {
 
 def is_redis_available():
     """Проверяет доступность Redis"""
-    if not redis_client:
+    if not REDIS_AVAILABLE or not redis_client:
         return False
     
     try:

@@ -3,15 +3,24 @@ import logging
 from datetime import datetime, timezone
 from database.connection import get_db_connection, release_db_connection
 
-# Абсолютный импорт с использованием полного пути
-from notifications.telegram_bot import notify_message
-
-# Настройка логирования
+# Настройка логирования (перенесено выше для использования в импортах)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# Безопасный импорт Telegram уведомлений
+try:
+    from notifications.telegram_bot import notify_message, TELEGRAM_ENABLED
+except ImportError as e:
+    logger.warning(f"Ошибка импорта Telegram модуля: {e}. Telegram уведомления отключены.")
+    TELEGRAM_ENABLED = False
+    
+    async def notify_message(user_id, sender_name, message_text):
+        """Заглушка для notify_message когда Telegram недоступен"""
+        logger.info(f"Telegram недоступен. Пропускаем уведомление для пользователя {user_id}")
+        pass
 
 # Синхронная функция-обертка для асинхронного вызова
 def run_async_with_loop(coro):
@@ -32,6 +41,11 @@ def notify_new_message(sender_id, recipient_id, message):
         logger.info(f"Отправитель (sender_id): {sender_id}")
         logger.info(f"Получатель (recipient_id): {recipient_id}")
         logger.info(f"Сообщение: {message}")
+        
+        # Проверяем доступность Telegram
+        if not TELEGRAM_ENABLED:
+            logger.info("Telegram уведомления отключены, пропускаем отправку")
+            return
         
         conn = get_db_connection()
         cursor = conn.cursor()

@@ -18,10 +18,15 @@ logger = logging.getLogger(__name__)
 # Загрузка переменных окружения
 load_dotenv()
 
-# Получение токена бота
+# Получение токена бота (делаем опциональным)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_ENABLED = bool(TELEGRAM_TOKEN)
+
 if not TELEGRAM_TOKEN:
-    raise ValueError("TELEGRAM_BOT_TOKEN не найден в переменных окружения")
+    logger.warning("TELEGRAM_BOT_TOKEN не найден в переменных окружения. Telegram уведомления отключены.")
+    TELEGRAM_ENABLED = False
+else:
+    logger.info("Telegram бот включен")
 
 # Настройки подключения к базе данных
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -359,6 +364,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def notify_message(user_id, sender_name, message_text):
+    """Отправляет уведомление пользователю через Telegram"""
+    if not TELEGRAM_ENABLED:
+        logger.info(f"Telegram уведомления отключены. Пропускаем для пользователя {user_id}")
+        return
+    
     try:
         conn = get_db_connection()
         cur = conn.cursor()
@@ -420,6 +430,10 @@ async def notify_message(user_id, sender_name, message_text):
 
 def main():
     """Запускает бота."""
+    if not TELEGRAM_ENABLED:
+        logger.warning("Telegram бот отключен - TELEGRAM_BOT_TOKEN не найден")
+        return
+    
     # Создаем приложение
     application = Application.builder().token(TELEGRAM_TOKEN).build()
 

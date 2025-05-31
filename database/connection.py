@@ -37,10 +37,10 @@ url = up.urlparse(DATABASE_URL)
 
 # Определяем настройки пула в зависимости от окружения
 if os.environ.get('FLASK_ENV') == 'production':
-    # Настройки для продакшена на Render
-    MIN_CONNECTIONS = 5
-    MAX_CONNECTIONS = 20
-    logger.info("Используются настройки базы данных для продакшена")
+    # Настройки для продакшена на Render - увеличиваем для 100+ пользователей
+    MIN_CONNECTIONS = 10
+    MAX_CONNECTIONS = 50
+    logger.info("Используются настройки базы данных для продакшена (оптимизировано для 100+ пользователей)")
 else:
     # Настройки для разработки
     MIN_CONNECTIONS = 2

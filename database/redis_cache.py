@@ -4,14 +4,7 @@ import logging
 from datetime import timedelta
 from functools import wraps
 from dotenv import load_dotenv
-
-# Попытка импорта Redis - если не удается, используем заглушки
-try:
-    import redis
-    REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
-    redis = None
+import redis
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -20,24 +13,49 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('redis_cache')
 
-# Подключение к Redis
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+# Настройки Redis
+REDIS_URL = os.environ.get('REDIS_URL')
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD')
+
+# Инициализация Redis клиента
 redis_client = None
 
-if REDIS_AVAILABLE:
-    try:
-        redis_client = redis.from_url(REDIS_URL)
-        redis_client.ping()  # Проверяем соединение
-        logger.info("Успешное подключение к Redis")
-    except Exception as e:
-        logger.warning(f"Не удалось подключиться к Redis: {str(e)}. Кэширование отключено.")
-        redis_client = None
-else:
-    logger.warning("Redis не установлен. Кэширование отключено.")
+try:
+    if REDIS_URL:
+        redis_client = redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    else:
+        redis_client = redis.Redis(
+            host=REDIS_HOST, 
+            port=REDIS_PORT, 
+            password=REDIS_PASSWORD,
+            decode_responses=True,
+            socket_timeout=5,
+            socket_connect_timeout=5
+        )
+    
+    # Тестируем соединение
+    redis_client.ping()
+    logger.info("Успешное подключение к Redis")
+    
+except Exception as e:
+    logger.warning(f"Redis недоступен: {e}. Кэширование отключено.")
+    redis_client = None
+
+# Увеличенные времена кэширования для производительности
+CACHE_TIMES = {
+    'user_profile': 3600,      # 1 час для профилей пользователей
+    'chat_list': 1800,         # 30 минут для списка чатов
+    'chat_messages': 600,      # 10 минут для сообщений чата
+    'user_info': 1800,         # 30 минут для информации о пользователе
+    'orders': 900,             # 15 минут для заказов
+    'default': 300             # 5 минут по умолчанию
+}
 
 def is_redis_available():
     """Проверяет доступность Redis"""
-    if not REDIS_AVAILABLE or redis_client is None:
+    if not redis_client:
         return False
     
     try:
@@ -46,32 +64,26 @@ def is_redis_available():
     except:
         return False
 
-def cache_set(key, value, expiration=3600):
-    """
-    Сохраняет данные в Redis-кэш
-    
-    Args:
-        key (str): Ключ для хранения данных
-        value (any): Данные для кэширования (будут сериализованы в JSON)
-        expiration (int): Время жизни кэша в секундах (по умолчанию 1 час)
-    """
-    if not is_redis_available():
+def cache_set(key, value, ttl=None):
+    """Устанавливает значение в кэш с улучшенной обработкой ошибок"""
+    if not redis_client:
         return False
     
     try:
-        # Используем пользовательский JSONEncoder для работы с Decimal
-        class DecimalEncoder(json.JSONEncoder):
-            def default(self, obj):
-                from decimal import Decimal
-                if isinstance(obj, Decimal):
-                    return float(obj)  # Преобразуем Decimal в float
-                return super(DecimalEncoder, self).default(obj)
+        # Определяем TTL на основе типа ключа
+        if ttl is None:
+            for cache_type, cache_ttl in CACHE_TIMES.items():
+                if cache_type in key:
+                    ttl = cache_ttl
+                    break
+            else:
+                ttl = CACHE_TIMES['default']
         
-        serialized_value = json.dumps(value, cls=DecimalEncoder)
-        redis_client.setex(key, expiration, serialized_value)
+        serialized_value = json.dumps(value, ensure_ascii=False, default=str)
+        redis_client.setex(key, ttl, serialized_value)
         return True
     except Exception as e:
-        logger.error(f"Ошибка при сохранении в кэш: {str(e)}")
+        logger.error(f"Ошибка записи в кэш для ключа {key}: {e}")
         return False
 
 def cache_get(key):

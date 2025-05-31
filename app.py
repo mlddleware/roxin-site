@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, g
+from flask import Flask, render_template, request, redirect, url_for, g, make_response, jsonify
 from socketio_config import socketio
 from database.connection import get_db_connection, release_db_connection, DatabaseConnection
 import datetime
@@ -22,6 +22,8 @@ from flask_cors import CORS
 from security.headers import add_security_headers
 from routes.admin import admin_bp
 from jinja2.exceptions import TemplateSyntaxError
+import gzip
+import functools
 
 # Создаём Flask-приложение
 app = Flask(__name__)
@@ -174,6 +176,25 @@ def template_syntax_error(error):
     return render_template('template_error.html', 
                          error_details=error_details,
                          timestamp=timestamp), 500
+
+# Middleware для сжатия gzip
+def gzip_middleware(f):
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        response = make_response(f(*args, **kwargs))
+        
+        # Проверяем, поддерживает ли клиент gzip
+        accept_encoding = request.headers.get('Accept-Encoding', '')
+        if 'gzip' in accept_encoding and response.status_code == 200:
+            # Сжимаем контент
+            content = response.get_data()
+            if len(content) > 1000:  # Сжимаем только если контент > 1KB
+                response.data = gzip.compress(content)
+                response.headers['Content-Encoding'] = 'gzip'
+                response.headers['Content-Length'] = len(response.data)
+        
+        return response
+    return decorated_function
 
 if __name__ == '__main__':
     if os.environ.get('FLASK_ENV') == 'production':
